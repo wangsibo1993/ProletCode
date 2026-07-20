@@ -8,6 +8,7 @@ import type {
   PressureLevel,
   AgentCompactionResult,
 } from "./types.js";
+import type { SerializedContextState } from "../session/types.js";
 import { DEFAULT_CONTEXT_CONFIG } from "./types.js";
 import { TokenEstimator } from "./token-estimator.js";
 import { snipMessages } from "./snip.js";
@@ -329,5 +330,27 @@ export class ContextManager {
     if (p >= this.config.aggressiveThreshold) return "high";
     if (p >= this.config.compactThreshold) return "medium";
     return "low";
+  }
+
+  exportState(): SerializedContextState {
+    return {
+      messageIdCounter: this.messageIdCounter,
+      lastAssistantTimestamp: this.lastAssistantTimestamp,
+      lastCompaction: this.lastCompaction,
+      mcState: {
+        toolResults: [...this.mcState.toolResults],
+        excludedIds: [...this.mcState.excludedIds],
+      },
+    };
+  }
+
+  restoreState(state: SerializedContextState): void {
+    this.messageIdCounter = state.messageIdCounter;
+    this.lastAssistantTimestamp = state.lastAssistantTimestamp;
+    this.lastCompaction = state.lastCompaction;
+    this.mcState = {
+      toolResults: [...state.mcState.toolResults],
+      excludedIds: new Set(state.mcState.excludedIds),
+    };
   }
 }

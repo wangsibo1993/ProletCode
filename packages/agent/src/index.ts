@@ -14,3 +14,18 @@ export type {
   CompactionEvent,
 } from "./context/index.js";
 export { DEFAULT_CONTEXT_CONFIG } from "./context/index.js";
+export { FileSessionStorage, buildConversationChain } from "./session/index.js";
+export type {
+  SessionStorage,
+  SessionHeader,
+  SessionEntry,
+  UserEntry,
+  AssistantEntry,
+  ToolResultEntry,
+  CompactionEntry,
+  ContextStateEntry,
+  LeafEntry,
+  SerializedCompactionRecord,
+  SerializedContextState,
+  ConversationChain,
+} from "./session/index.js";

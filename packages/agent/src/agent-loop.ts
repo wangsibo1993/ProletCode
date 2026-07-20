@@ -11,6 +11,7 @@ import type { ToolRegistry } from "./tools/registry.js";
 import type { ToolContext } from "./tools/types.js";
 import { ContextManager } from "./context/context-manager.js";
 import type { ContextConfig, ProviderCapabilities } from "./context/types.js";
+import type { SerializedContextState } from "./session/types.js";
 
 export interface AgentLoopParams {
   provider: Provider;
@@ -23,6 +24,7 @@ export interface AgentLoopParams {
   cwd: string;
   contextConfig?: Partial<ContextConfig>;
   providerCapabilities?: ProviderCapabilities;
+  contextState?: SerializedContextState;
 }
 
 export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<AgentEvent, Terminal> {
@@ -41,13 +43,19 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<AgentE
     capabilities: params.providerCapabilities ?? { cacheEdits: false, prefixCaching: false },
   } as any);
 
+  if (params.contextState) {
+    contextManager.restoreState(params.contextState);
+  }
+
   while (true) {
     if (params.signal?.aborted) {
+      yield { type: "context_state_changed", state: contextManager.exportState() };
       return { reason: "aborted" };
     }
 
     turnCount++;
     if (turnCount > maxTurns) {
+      yield { type: "context_state_changed", state: contextManager.exportState() };
       return { reason: "max_turns" };
     }
 
@@ -107,13 +115,16 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<AgentE
       messages.push(...postTurn);
 
       yield { type: "turn_end", stopReason };
+      yield { type: "context_state_changed", state: contextManager.exportState() };
       return { reason: "completed" };
     }
 
-    messages.push({
+    const assistantMessage: ProviderMessage = {
       role: "assistant",
       content: assistantContent as ProviderContentBlock[],
-    });
+    };
+    messages.push(assistantMessage);
+    yield { type: "message_appended", message: assistantMessage, role: "assistant" };
 
     for (const toolUse of toolUseBlocks) {
       yield { type: "tool_use_start", name: toolUse.name, id: toolUse.id, input: toolUse.input as Record<string, unknown> };
@@ -122,7 +133,7 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<AgentE
 
       yield { type: "tool_use_end", name: toolUse.name, id: toolUse.id, result };
 
-      messages.push({
+      const toolResultMessage: ProviderMessage = {
         role: "user",
         content: [
           {
@@ -132,7 +143,9 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<AgentE
             is_error: result.isError,
           },
         ],
-      });
+      };
+      messages.push(toolResultMessage);
+      yield { type: "message_appended", message: toolResultMessage, role: "tool_result" };
 
       // 时机 1：消息入队 — Snip
       const snipped = contextManager.onMessageAdded(messages);
