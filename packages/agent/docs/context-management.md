@@ -9,7 +9,7 @@ ProletCode 的上下文管理系统负责在有限的 context window（默认 12
 1. **存储完整，视图裁剪** — 存储层 append-only，压缩只影响发给 API 的视图
 2. **不做入库时压缩** — 唯一例外：安全阀截断（防单条爆内存）
 3. **能力门控** — 根据 provider 能力决定可用策略（有 cache_edits → 开 Microcompact 路径 A）
-4. **Context Agent 优先** — 压力压缩默认交由 Context Agent 做智能决策，降级为规则管线
+4. **规则管线为主** — 压力压缩默认走规则管线；Context Agent 代码保留，待本地模型成熟后启用
 5. **遥测驱动优化** — 每次压缩操作记录结构化数据，为未来自适应策略积累依据
 
 ## 参考项目
@@ -35,11 +35,12 @@ ProletCode 的上下文管理系统负责在有限的 context window（默认 12
 │                                                                  │
 │  API 调用前 ──→ beforeApiCall() ──→ 压力检测                     │
 │                                      │                           │
-│                                      ├─ Context Agent（默认）    │
-│                                      │    ├─ 有效 → 完成         │
-│                                      │    └─ 无效 → 降级         │
+│                                      ├─ Rule 管线（默认）        │
+│                                      │    ├─ Prune              │
+│                                      │    └─ Summarize          │
 │                                      │                           │
-│                                      └─ Rule 管线（降级/禁用时） │
+│                                      └─ Context Agent（保留，    │
+│                                           当前默认禁用）         │
 │                                           ├─ Prune              │
 │                                           └─ Summarize          │
 │                                                                  │
@@ -76,7 +77,7 @@ ProletCode 的上下文管理系统负责在有限的 context window（默认 12
 
 当 token 估算 / contextWindow >= `compactThreshold`（默认 70%）时触发。
 
-**默认路径：Context Agent**
+**可选路径：Context Agent（当前默认禁用，待本地模型成熟后启用）**
 
 唤醒一个子 LLM 调用，提供：
 - 消息列表元数据（id、类型、工具名、字符数）
@@ -88,7 +89,7 @@ Agent 执行后评估效果：
 - 有效（压力降至 compactThreshold 以下，或下降 >= 15%）→ 完成
 - 无效 / 超时 / 错误 → 降级为 Rule 管线
 
-**降级路径：Rule 管线**
+**默认路径：Rule 管线**
 
 - 压力 70-85%：Prune — 替换旧/重复 tool_result 为元信息行
 - 压力 85%+：Summarize — 调 LLM 生成/更新增量摘要
@@ -162,8 +163,8 @@ interface ContextConfig {
   compactTargetPressure: number;   // 0.50
   aggressiveThreshold: number;     // 0.85
   
-  // Context Agent
-  disableContextAgent: boolean;    // false（默认开启）
+  // Context Agent（当前默认禁用，代码保留待未来启用）
+  disableContextAgent: boolean;    // true（默认禁用）
   contextAgentTimeout: number;     // 10000 (10s)
   
   // 通用

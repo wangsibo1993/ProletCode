@@ -37,7 +37,7 @@ export const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
   compactTargetPressure: 0.50,
   aggressiveThreshold: 0.85,
 
-  disableContextAgent: false,
+  disableContextAgent: true,
   contextAgentTimeout: 10_000,
 
   keepRecentTokens: 20_000,
